@@ -1,0 +1,238 @@
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Globalization;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Net.NetworkInformation;
+using WpfApp1.OpenWeatherAPI;
+
+
+namespace WpfApp1
+{
+    public static class apiKeys
+    {
+        public const string OpenWeather = "";
+    }
+
+
+
+    //responsible for creating httpfactory and services
+    public class httpFactory
+    {
+
+        public IServiceProvider InitServiceCollection()
+        {
+            ServiceCollection services = new ServiceCollection();
+
+            // in order to avoid code multiplication by creating three classes with different interfaces, it is better to separate them just by interfaces since they implement one basic function, get some data from api
+            services.AddHttpClient<IweatherAPI, ApiWork>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.openweathermap.org");
+            });
+
+            services.AddHttpClient<IhourForecastAPI, ApiWork>(client =>
+            {
+                client.BaseAddress = new Uri("https://pro.openweathermap.org");
+            });
+
+            services.AddHttpClient<IdeterCityAPI, ApiWork>(client =>
+            {
+                client.BaseAddress = new Uri("http://ip-api.com/json");
+            });
+
+
+            services.AddSingleton<IdataLogic, DataLogic>();
+
+
+            // service provider responsible for giving services;
+            IServiceProvider serviceProvider = services.BuildServiceProvider();
+
+
+            return serviceProvider;
+        }
+
+    }
+
+
+    public interface IweatherAPI
+    {
+        Task<CurrentWeatherData> getCurrentWeather(string city);
+        Task<DailyForecastArray> getDailyForecast(string city);
+        Task<(double, double)> GetCoordinates(string city);
+        Task<string> GetAirPollution(string city);
+
+
+    }
+
+    public interface IhourForecastAPI
+    {
+        Task<HourlyForecastArray> getHourlyForecast(string city);
+    }
+
+    public interface IdeterCityAPI
+    {
+        Task<string> getCity();
+    }
+
+
+    public interface IdataLogic
+    {
+        string FromUnixTime(long timestamp, int number);
+
+        string WindDirection(long degree);
+        (string, string) Visibility(long visibility);
+
+        string PercentageCategory(int percentage);
+
+        bool PingGoogle();
+
+    }
+
+    // when we ask for service from service provider it automatically passes the http client created and maintained by httpfactory and returns interface implementation
+    // thus we will have one different instance of the same class with method separation by interfaces and its own httpclient
+    namespace OpenWeatherAPI
+    {
+        public class ApiWork : IweatherAPI, IhourForecastAPI, IdeterCityAPI
+        {
+
+            private readonly HttpClient _httpClient;
+            private readonly string apiKey = apiKeys.OpenWeather;
+
+            public ApiWork(HttpClient httpClient)
+            {
+                _httpClient = httpClient;
+            }
+
+            public async Task<CurrentWeatherData> getCurrentWeather(string city)
+            {
+                string path = $"/data/2.5/weather?q={city}&appid={apiKey}&units=metric";    // cnt is the number of days
+                return await GetRequestAsync<CurrentWeatherData>(path);
+            }
+
+
+            public async Task<HourlyForecastArray> getHourlyForecast(string city)
+            {
+                string path = $"/data/2.5/forecast/hourly?q={city}&appid={apiKey}&units=metric";
+                return await GetRequestAsync<HourlyForecastArray>(path);
+            }
+
+            public async Task<DailyForecastArray> getDailyForecast(string city)
+            {
+                string path = $"/data/2.5/forecast/daily?q={city}&cnt=8&appid={apiKey}&units=metric";
+                return await GetRequestAsync<DailyForecastArray>(path);
+            }
+
+            public async Task<string> getCity()
+            {
+                string path = "";
+                DeterCity temp = await GetRequestAsync<DeterCity>(path);
+                return temp.city;
+            }
+
+
+            public async Task<T> GetRequestAsync<T>(string path)
+            {
+                HttpResponseMessage response = await _httpClient.GetAsync(path);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<T>();
+            }
+
+            //maybe use EU table with actuall number of aqi
+            public async Task<string> GetAirPollution(string city)
+            {
+                string[] quality = ["Good", "Fair", "Moderate", "Poor", "Very Poor"];
+                (double lat, double lon) = await GetCoordinates(city);
+                string path = $"/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={apiKey}";
+                AirPollution pollution = await GetRequestAsync<AirPollution>(path);
+                return quality[pollution.list[0].main.aqi - 1];
+            }
+
+            public async Task<(double, double)> GetCoordinates(string city)
+            {
+                string path = $"/geo/1.0/direct?q={city}&limit=5&appid={apiKey}";
+                Geolocation[] data = await GetRequestAsync<Geolocation[]>(path);
+                double lon = data[0].lon;
+                double lat = data[0].lat;
+                return (lat, lon);
+            }
+
+        }
+
+    }
+
+
+    public class DataLogic : IdataLogic
+    {
+        public string FromUnixTime(long timestamp, int number)
+        {
+            var dto = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+            if (number == 0)
+            {
+                return dto.LocalDateTime.ToString();
+            }
+            else
+            {
+                return dto.LocalDateTime.ToString("dddd", new CultureInfo("en-US"));
+            }
+        }
+
+
+        public string WindDirection(long degree)
+        {
+            int temp = (int)((degree / 22.5) + .5);
+            string[] arr = [ "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" ];
+            return arr[temp % 16];
+        }
+
+        public (string, string) Visibility(long visibility)
+        {
+
+            double km = visibility / 1000;
+
+            string category = visibility switch
+            {
+                >= 10000 => "Excellent",
+                >= 4000 => "Good",
+                >= 2000 => "Moderate",
+                >= 800 => "Poor",
+                _ => "Very poor"
+            };
+
+            return (km.ToString(), category);
+
+        }
+
+        public string PercentageCategory(int percentage)
+        {
+            string category = percentage switch
+            {
+                >= 81 => "Excellent",
+                >= 61 => "Good",
+                >= 41 => "Moderate",
+                >= 21 => "Poor",
+                _ => "Very poor"
+
+            };
+
+            return category;
+
+        }
+
+        public bool PingGoogle()
+        {
+            try
+            {
+                Ping ping = new Ping();
+                var reply = ping.Send("google.com", 1000);
+                return reply.Status == IPStatus.Success;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+
+    }
+
+}
