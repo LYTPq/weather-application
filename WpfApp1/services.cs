@@ -5,24 +5,36 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Net.NetworkInformation;
 using WpfApp1.OpenWeatherAPI;
+using Microsoft.Extensions.Configuration;
 
 
 namespace WpfApp1
 {
-    public static class apiKeys
+
+    public class ApiSettings
     {
-        public const string OpenWeather = "";
+        public string OpenWeatherKey { get; set; }
     }
 
 
-
-    //responsible for creating httpfactory and services
+    /// <summary>
+    /// Responsible for creating httpfactory and services
+    /// </summary>
     public class httpFactory
     {
 
         public IServiceProvider InitServiceCollection()
         {
+            var config = new ConfigurationBuilder()
+            .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+            .AddJsonFile("appsettings.json")
+            .Build();
+
+            string apiKey = config["ApiKeys:OpenWeather"];
+
             ServiceCollection services = new ServiceCollection();
+
+            services.AddSingleton(new ApiSettings { OpenWeatherKey = apiKey });
 
             // in order to avoid code multiplication by creating three classes with different interfaces, it is better to separate them just by interfaces since they implement one basic function, get some data from api
             services.AddHttpClient<IweatherAPI, ApiWork>(client =>
@@ -44,7 +56,7 @@ namespace WpfApp1
             services.AddSingleton<IdataLogic, DataLogic>();
 
 
-            // service provider responsible for giving services;
+            // service provider responsible for giving services
             IServiceProvider serviceProvider = services.BuildServiceProvider();
 
 
@@ -53,9 +65,13 @@ namespace WpfApp1
 
     }
 
-
+    /// <summary>
+    /// Gives current weather, daily forecasts, coordinates, and air pollution data
+    /// from the OpenWeather API.
+    /// </summary>
     public interface IweatherAPI
     {
+
         Task<CurrentWeatherData> getCurrentWeather(string city);
         Task<DailyForecastArray> getDailyForecast(string city);
         Task<(double, double)> GetCoordinates(string city);
@@ -69,14 +85,28 @@ namespace WpfApp1
         Task<HourlyForecastArray> getHourlyForecast(string city);
     }
 
+
+    /// <summary>
+    /// Resolves the user's city based on IP geolocation.
+    /// </summary>
     public interface IdeterCityAPI
     {
         Task<string> getCity();
     }
 
-
+    /// <summary>
+    /// Defines methods for processing and interpreting data types, such as timestamps, wind directions,
+    /// visibility, and percentages
+    /// </summary>
     public interface IdataLogic
     {
+
+        /// <summary>
+        /// Converts a Unix timestamp into a readable local date/time string
+        /// </summary>
+        /// <param name="timestamp">The Unix timestamp in seconds</param>
+        /// <param name="number">Set to 0 for a full date/time string, anny other number returns only the Day of the Week.</param>
+        /// <returns>A formatted local time string.</returns>
         string FromUnixTime(long timestamp, int number);
 
         string WindDirection(long degree);
@@ -84,43 +114,46 @@ namespace WpfApp1
 
         string PercentageCategory(int percentage);
 
+
         bool PingGoogle();
 
     }
 
-    // when we ask for service from service provider it automatically passes the http client created and maintained by httpfactory and returns interface implementation
-    // thus we will have one different instance of the same class with method separation by interfaces and its own httpclient
+    // When we ask for service from service provider it automatically passes the http client created and maintained by httpfactory and returns interface implementation
+    // Thus we will have one different instance of the same class with method separation by interfaces and its own httpclient
     namespace OpenWeatherAPI
     {
         public class ApiWork : IweatherAPI, IhourForecastAPI, IdeterCityAPI
         {
 
             private readonly HttpClient _httpClient;
-            private readonly string apiKey = apiKeys.OpenWeather;
+            private readonly string _apiKey;
 
-            public ApiWork(HttpClient httpClient)
+            public ApiWork(HttpClient httpClient, ApiSettings settings)
             {
                 _httpClient = httpClient;
+                _apiKey = settings.OpenWeatherKey;
             }
 
             public async Task<CurrentWeatherData> getCurrentWeather(string city)
             {
-                string path = $"/data/2.5/weather?q={city}&appid={apiKey}&units=metric";    // cnt is the number of days
+                string path = $"/data/2.5/weather?q={city}&appid={_apiKey}&units=metric";    // cnt is the number of days
                 return await GetRequestAsync<CurrentWeatherData>(path);
             }
 
 
             public async Task<HourlyForecastArray> getHourlyForecast(string city)
             {
-                string path = $"/data/2.5/forecast/hourly?q={city}&appid={apiKey}&units=metric";
+                string path = $"/data/2.5/forecast/hourly?q={city}&appid={_apiKey}&units=metric";
                 return await GetRequestAsync<HourlyForecastArray>(path);
             }
 
             public async Task<DailyForecastArray> getDailyForecast(string city)
             {
-                string path = $"/data/2.5/forecast/daily?q={city}&cnt=8&appid={apiKey}&units=metric";
+                string path = $"/data/2.5/forecast/daily?q={city}&cnt=8&appid={_apiKey}&units=metric";
                 return await GetRequestAsync<DailyForecastArray>(path);
             }
+
 
             public async Task<string> getCity()
             {
@@ -129,7 +162,10 @@ namespace WpfApp1
                 return temp.city;
             }
 
-
+            /// <summary>
+            /// Sends a GET request and deserializes the JSON response into. >
+            /// </summary>
+            /// <exception cref="HttpRequestException">Thrown if the response status is not successful.</exception>
             public async Task<T> GetRequestAsync<T>(string path)
             {
                 HttpResponseMessage response = await _httpClient.GetAsync(path);
@@ -137,19 +173,19 @@ namespace WpfApp1
                 return await response.Content.ReadFromJsonAsync<T>();
             }
 
-            //maybe use EU table with actuall number of aqi
             public async Task<string> GetAirPollution(string city)
             {
                 string[] quality = ["Good", "Fair", "Moderate", "Poor", "Very Poor"];
                 (double lat, double lon) = await GetCoordinates(city);
-                string path = $"/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={apiKey}";
+                string path = $"/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={_apiKey}";
                 AirPollution pollution = await GetRequestAsync<AirPollution>(path);
                 return quality[pollution.list[0].main.aqi - 1];
             }
 
+
             public async Task<(double, double)> GetCoordinates(string city)
             {
-                string path = $"/geo/1.0/direct?q={city}&limit=5&appid={apiKey}";
+                string path = $"/geo/1.0/direct?q={city}&limit=5&appid={_apiKey}";
                 Geolocation[] data = await GetRequestAsync<Geolocation[]>(path);
                 double lon = data[0].lon;
                 double lat = data[0].lat;
@@ -163,6 +199,8 @@ namespace WpfApp1
 
     public class DataLogic : IdataLogic
     {
+
+        
         public string FromUnixTime(long timestamp, int number)
         {
             var dto = DateTimeOffset.FromUnixTimeSeconds(timestamp);
@@ -179,11 +217,15 @@ namespace WpfApp1
 
         public string WindDirection(long degree)
         {
+            // divide 360 degree into 16 compass sectors of 22.5 degree each
             int temp = (int)((degree / 22.5) + .5);
             string[] arr = [ "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" ];
             return arr[temp % 16];
         }
 
+
+        
+        // Used for the categarization of visibility
         public (string, string) Visibility(long visibility)
         {
 
@@ -202,6 +244,7 @@ namespace WpfApp1
 
         }
 
+        // Used for the categorization of air quality.
         public string PercentageCategory(int percentage)
         {
             string category = percentage switch

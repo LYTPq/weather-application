@@ -25,8 +25,6 @@ namespace WpfApp1
         public int humidity { get; set; }
         public int pressure { get; set; }
 
-        
-
     }
 
     public class Wind

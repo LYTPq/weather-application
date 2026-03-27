@@ -6,8 +6,14 @@ using System.Runtime.CompilerServices;
 
 namespace WpfApp1
 {
+
+    /// <summary>
+    /// Primary view model for the weather dashboard.
+    /// Coordinates API calls and regulates weather data for XAML binding.
+    /// </summary>
     public class MainViewModel : INotifyPropertyChanged
     {
+
         private readonly IweatherAPI _weatherApi;
         private readonly IhourForecastAPI _hourApi;
         private readonly IdeterCityAPI _cityApi;
@@ -15,6 +21,7 @@ namespace WpfApp1
         private string _currentCity;
 
         private CurrentWeatherData _currentWeather;
+
 
         public CurrentWeatherData CurrentWeather
         {
@@ -107,7 +114,7 @@ namespace WpfApp1
         }
 
 
-        // it is easier to work with collection while binding data into lots of objects 
+        // automatically notifies wpf when items are added or removed.
 
         private ObservableCollection<DailyForecastData> _dailyForecast;
         public ObservableCollection<DailyForecastData> DailyForecast
@@ -154,39 +161,56 @@ namespace WpfApp1
         }
 
 
-        //first time initialization
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="data"></param>
+        private void UpdateDisplayProperties(CurrentWeatherData data)
+        {
+            CurrentWeather = data;
+            CurrentDateTime = $"{_appLogic.FromUnixTime(data.unixDate, 0).Remove(0, 11)}, {_appLogic.FromUnixTime(data.unixDate, 1)}";
+            WindDirection = _appLogic.WindDirection(data.wind.deg);
+            Sunrise = _appLogic.FromUnixTime(data.sys.sunrise, 0).Remove(0, 11);
+            Sunset = _appLogic.FromUnixTime(data.sys.sunset, 0).Remove(0, 11);
+            HumidityCategory = _appLogic.PercentageCategory(data.main.humidity);
+            IconPath = $"Images/{data.weather[0].icon}.png";
+        }
+
+
+        // First time initialization.
         public async Task LoadAsync()
         {
             string city = await _cityApi.getCity();
             await RefreshAsync(city);
         }
 
-        //separate method to update the data
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="city"></param>
         public async Task RefreshAsync(string city)
         {
             _currentCity = city;
 
 
             CurrentWeather = await _weatherApi.getCurrentWeather(city);
-            CurrentDateTime = $"{_appLogic.FromUnixTime(CurrentWeather.unixDate,0).Remove(0, 11)}, {_appLogic.FromUnixTime(CurrentWeather.unixDate, 1)}";
-            WindDirection = _appLogic.WindDirection(CurrentWeather.wind.deg);
-            Sunrise = _appLogic.FromUnixTime(CurrentWeather.sys.sunrise,0).Remove(0, 11);
-            Sunset = _appLogic.FromUnixTime(CurrentWeather.sys.sunset, 0).Remove(0, 11);
             Pollution = await _weatherApi.GetAirPollution(city);
-            HumidityCategory = _appLogic.PercentageCategory(CurrentWeather.main.humidity);
             (Visibility, VisibilityCategory) = _appLogic.Visibility(CurrentWeather.visibility);
 
-            IconPath = $"Images/{CurrentWeather.weather[0].icon}.png";
+
+            UpdateDisplayProperties(CurrentWeather);
 
             DailyForecastArray dailyForecast = await _weatherApi.getDailyForecast(city);
 
             HourlyForecastArray hourlyForecast = await _hourApi.getHourlyForecast(city);
 
 
-
+            // image parsing based on the info from the api 
             for (int i = 0; i < 7; i++)
             {
+                // truncate day name to 3 characters 
                 dailyForecast.list[i].DayOfWeek = _appLogic.FromUnixTime(dailyForecast.list[i].unixDate,1).Remove(3);
+
                 dailyForecast.list[i].iconPath = $"Images/{dailyForecast.list[i].weather[0].icon}.png";
             }
 
@@ -195,6 +219,7 @@ namespace WpfApp1
             var src = hourlyForecast.list;
             var result = new ObservableCollection<HourlyForecastData>();
 
+            // pick every 3rd entry to get 3-hour intervals, max 7 items
             for (int i = 0; i < src.Length && result.Count < 7; i += 3)
             {
                 src[i].time = _appLogic.FromUnixTime(src[i].dt, 0).Substring(11,5);
@@ -203,6 +228,7 @@ namespace WpfApp1
 
             HourlyForecast = result;
 
+            // If there is no rain data in the call, set it to zero manually 
             if (CurrentWeather.rain != null && CurrentWeather.rain.onehour > 0)
                 CurrentRain = $"{CurrentWeather.rain.onehour}";
             else
@@ -211,7 +237,9 @@ namespace WpfApp1
 
         }
 
-
+        // When the user selects a day from the forecast, map its data into
+        // CurrentWeatherData so the main UI panel displays that day's weather
+        // instead of today's.
         private void ApplyDailyForecast(DailyForecastData day)
         {
 
@@ -240,13 +268,7 @@ namespace WpfApp1
                
             };
 
-            CurrentWeather = temp;
-            CurrentDateTime = $"{_appLogic.FromUnixTime(day.unixDate, 0).Remove(0, 11)}, {_appLogic.FromUnixTime(day.unixDate, 1)}";
-            WindDirection = _appLogic.WindDirection(day.deg);
-            Sunrise = _appLogic.FromUnixTime(day.sunrise, 0).Remove(0, 11);
-            Sunset = _appLogic.FromUnixTime(day.sunset, 0).Remove(0, 11);
-            HumidityCategory = _appLogic.PercentageCategory(day.humidity);
-            IconPath = $"Images/{day.weather[0].icon}.png";
+            UpdateDisplayProperties(temp);
             CurrentRain = day.rain.ToString();
 
         }
