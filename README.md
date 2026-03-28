@@ -1,17 +1,3 @@
 # Weather Application
-
-## App structure
-- `WpfApp1/` — Main application project containing XAML views, code-behind, shared view-model logic, and service integrations.
-  - `App.xaml` / `App.xaml.cs` — Application entry, resource dictionaries, and startup initialization.
-  - `MainWindow.xaml` / `MainWindow.xaml.cs` — Primary window layout with bindings for current conditions, hourly preview, and daily forecast cards.
-  - `ViewModelBase.cs` — Central view model coordinating location lookup, forecast retrieval, and property change notifications for the UI.
-  - `services.cs` — HTTP client helpers that call OpenWeather endpoints (current, daily, hourly, and air quality) and map responses to view-model structures.
-  - `formats.cs` — Utility helpers for formatting units (temperature, wind, timestamps) prior to display.
-  - `Images/` — Static assets (e.g., weather icons) referenced by `MainWindow.xaml` for the forecast cards.
-
-## Data flow and responsibilities
-- **Startup:** `App.xaml.cs` initializes the app and opens `MainWindow`.
-- **Location resolution:** `ViewModelBase` attempts IP-based geolocation (via `services.cs`) and falls back to manual city searches triggered from the UI.
-- **Data retrieval:** `services.cs` issues HTTP requests for current weather, hourly snapshots, daily forecasts, and air-quality indices, returning lightweight DTOs.
-- **Binding and formatting:** `ViewModelBase` normalizes service responses (with help from `formats.cs`), exposes bindable properties, and raises change notifications consumed by `MainWindow.xaml` bindings.
-- **Presentation:** `MainWindow.xaml` arranges current conditions, hourly list, and seven-day cards, using assets from `Images/` to render status icons.
+<img width="1978" height="1189" alt="image" src="https://github.com/user-attachments/assets/f65f8dcc-b00b-4463-bd69-8db2048ac7df" />
+In the search bar, you can enter any desired city and see information about the weather. In the upper half of the right side, you can see the daily and hourly forecast(with 3-hour intervals). On the lower half, you can see more detailed information about the current city's weather for the current day. Panels for the daily forecast are interactive, and if you right-click on any day, you will see more detailed information for that specific day. If you type an unknown city, you will see the message "City is not found". If you have trouble with the internet connection, you will see the message "Problems with internet connection."
