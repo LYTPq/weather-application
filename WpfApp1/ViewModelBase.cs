@@ -161,10 +161,9 @@ namespace WpfApp1
         }
 
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="data"></param>
+        // pushes weather data into the formatted display properties
+        // (date/time, wind direction, sunrise/sunset, humidity category, icon)
+
         private void UpdateDisplayProperties(CurrentWeatherData data)
         {
             CurrentWeather = data;
@@ -185,9 +184,9 @@ namespace WpfApp1
         }
 
         /// <summary>
-        /// 
+        /// Fetches all weather data for the given city and updates every bound property
+        /// Called on startup and whenever the user searches for a new city
         /// </summary>
-        /// <param name="city"></param>
         public async Task RefreshAsync(string city)
         {
             _currentCity = city;
@@ -237,9 +236,8 @@ namespace WpfApp1
 
         }
 
-        // When the user selects a day from the forecast, map its data into
-        // CurrentWeatherData so the main UI panel displays that day's weather
-        // instead of today's.
+        // maps a daily forecast entry into a CurrentWeatherData so the main
+        // panel can display that day using the same bindings as today's weather
         private void ApplyDailyForecast(DailyForecastData day)
         {
 

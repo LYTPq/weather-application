@@ -11,6 +11,9 @@ using Microsoft.Extensions.Configuration;
 namespace WpfApp1
 {
 
+    /// <summary>
+    /// Holds the OpenWeather API key loaded from <c>appsettings.json</c>.
+    /// </summary>
     public class ApiSettings
     {
         public string OpenWeatherKey { get; set; }
@@ -18,7 +21,8 @@ namespace WpfApp1
 
 
     /// <summary>
-    /// Responsible for creating httpfactory and services
+    /// Bootstraps the dependency-injection container, configures instances, and registers all application services
+    /// We want to avoid duplicating HTTP logic while letting each service target a different API host
     /// </summary>
     public class httpFactory
     {
@@ -105,16 +109,21 @@ namespace WpfApp1
         /// Converts a Unix timestamp into a readable local date/time string
         /// </summary>
         /// <param name="timestamp">The Unix timestamp in seconds</param>
-        /// <param name="number">Set to 0 for a full date/time string, anny other number returns only the Day of the Week.</param>
-        /// <returns>A formatted local time string.</returns>
+        /// <param name="number">Set to 0 for a full date/time string, anny other number returns only the day of the week</param>
+        /// <returns> A formatted local time string </returns>
         string FromUnixTime(long timestamp, int number);
 
+        // converts wind degrees to a 16-point compass label
         string WindDirection(long degree);
+
+        // converts visibility in metres to (km string, category string)
         (string, string) Visibility(long visibility);
 
+        // maps a humidity percentage to a category
         string PercentageCategory(int percentage);
 
 
+        // Used for checking internet connection
         bool PingGoogle();
 
     }
@@ -123,6 +132,10 @@ namespace WpfApp1
     // Thus we will have one different instance of the same class with method separation by interfaces and its own httpclient
     namespace OpenWeatherAPI
     {
+        /// <summary>
+        /// Implements all three API interfaces with one shared GetRequestAsync helper
+        /// Each DI registration gives this class a different HttpClient base address
+        /// </summary>
         public class ApiWork : IweatherAPI, IhourForecastAPI, IdeterCityAPI
         {
 
@@ -162,8 +175,11 @@ namespace WpfApp1
                 return temp.city;
             }
 
+
+
             /// <summary>
-            /// Sends a GET request and deserializes the JSON response into. >
+            /// Sends a GET request to the specified <paramref name="path"/>
+            /// and deserializes the JSON response body into <typeparamref name="T"/>.
             /// </summary>
             /// <exception cref="HttpRequestException">Thrown if the response status is not successful.</exception>
             public async Task<T> GetRequestAsync<T>(string path)
@@ -173,6 +189,7 @@ namespace WpfApp1
                 return await response.Content.ReadFromJsonAsync<T>();
             }
 
+            // gets coordinates first, then queries the air pollution endpoint
             public async Task<string> GetAirPollution(string city)
             {
                 string[] quality = ["Good", "Fair", "Moderate", "Poor", "Very Poor"];
@@ -183,6 +200,7 @@ namespace WpfApp1
             }
 
 
+            
             public async Task<(double, double)> GetCoordinates(string city)
             {
                 string path = $"/geo/1.0/direct?q={city}&limit=5&appid={_apiKey}";
@@ -196,11 +214,12 @@ namespace WpfApp1
 
     }
 
-
+    /// <summary>
+    /// Responsible for formatting, categorization, and connectivity-check helpers
+    /// </summary>
     public class DataLogic : IdataLogic
     {
 
-        
         public string FromUnixTime(long timestamp, int number)
         {
             var dto = DateTimeOffset.FromUnixTimeSeconds(timestamp);
@@ -214,7 +233,6 @@ namespace WpfApp1
             }
         }
 
-
         public string WindDirection(long degree)
         {
             // divide 360 degree into 16 compass sectors of 22.5 degree each
@@ -225,7 +243,6 @@ namespace WpfApp1
 
 
         
-        // Used for the categarization of visibility
         public (string, string) Visibility(long visibility)
         {
 
@@ -244,7 +261,6 @@ namespace WpfApp1
 
         }
 
-        // Used for the categorization of air quality.
         public string PercentageCategory(int percentage)
         {
             string category = percentage switch
