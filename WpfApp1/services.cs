@@ -6,7 +6,7 @@ using System.Net.Http.Json;
 using System.Net.NetworkInformation;
 using WpfApp1.OpenWeatherAPI;
 using Microsoft.Extensions.Configuration;
-
+using System.Windows;
 
 namespace WpfApp1
 {
@@ -292,6 +292,28 @@ namespace WpfApp1
         }
 
 
+    }
+
+    public static class ApiExceptionHandler
+    {
+        public static void Handle(Exception ex)
+        {
+            string message = ex switch
+            {
+                HttpRequestException e => e.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.NotFound => "City not found",
+                    System.Net.HttpStatusCode.Unauthorized => "Invalid API key",
+                    System.Net.HttpStatusCode.TooManyRequests => "API rate limit exceeded",
+                    System.Net.HttpStatusCode.ServiceUnavailable => "Weather service is down",
+                    _ => $"Unexpected error: {e.StatusCode}"
+                },
+                TaskCanceledException => "Request timed out",
+                System.Text.Json.JsonException => "Received unexpected data from the server",
+                _ => "Something went wrong"
+            };
+            MessageBox.Show(message);
+        }
     }
 
 }

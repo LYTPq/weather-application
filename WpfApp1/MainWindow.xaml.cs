@@ -19,37 +19,16 @@ namespace WpfApp1
             InitializeComponent();
         }
 
+
         public async void Search_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
                 string request = search.Text;
-                if (string.IsNullOrWhiteSpace(request))
-                {
-                    return;
-                }
+                if (string.IsNullOrWhiteSpace(request)) return;
 
-                try
-                {
-                    await vm.RefreshAsync(request);
-
-                }
-                catch (HttpRequestException ex)
-                {
-                    string message = ex.Message;
-                    if (message == "Response status code does not indicate success: 404 (Not Found).")
-                    {
-                        MessageBox.Show("City not found");
-                    }
-                    else
-                    {
-                        throw(ex);
-                    }
-
-
-                }
-
-
+                try { await vm.RefreshAsync(request); }
+                catch (Exception ex) { ApiExceptionHandler.Handle(ex); }
             }
         }
 

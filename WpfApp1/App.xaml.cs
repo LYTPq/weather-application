@@ -9,7 +9,7 @@ namespace WpfApp1
     public partial class App : Application
     {
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
@@ -27,11 +27,12 @@ namespace WpfApp1
                 return;
             }
 
-            
+
             var vm = new MainViewModel(weatherApi, hourApi, cityApi, appLogic);
 
 
-            vm.LoadAsync();
+            try { await vm.LoadAsync(); }
+            catch (Exception ex) { ApiExceptionHandler.Handle(ex); return; }
 
             // now viewmodel is the property of datacontext
             // datacontext responsible for binding the data in windows 
